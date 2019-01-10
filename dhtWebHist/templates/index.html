@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+   <head>
+      <title>Power Usage data </title>
+      <link rel="stylesheet" href='../static/style.css'/>
+      <meta http-equiv="refresh" content="300" />
+   </head>
+   <body>
+	<h1>Power Usage Data </h1>
+	<h3> Aircon and Hot Water   ==>  {{ sensor_count_1 }} mwh/15min</h3>
+	<h3> General Power ==>  {{ sensor_count_2  }} mwh/15 min</h3>
+	<h3> Estimated Cost Tariff 33, Aircon and Hot Water ==> ${{ sensor_1_rate_cost }}</h3>
+	<h3> Estimated Cost Tariff 11, General Power ==> ${{ sensor_2_rate_cost }} </h3>
+	<h3> Total Cost Tariff 33 ==> ${{ costSamplesSensor1 }}</h3>
+	<h3> Total Cost Tariff 11 ==> ${{ costSamplesSensor2 }}</h3>
+	<h3> Combined total cost ==> ${{ costTotal }}</h3>
+	<hr>
+	<h3> Last Sensors Reading: {{ measure_time }} ==> <a href="/"class="button">REFRESH</a></h3>	
+	<hr>
+ <script src="{{ url_for('static', filename='jquery-1.8.3.min.js') }}"></script>
+		<script type="text/javascript">
+
+		
+		$(function () {
+    $.getJSON('http://192.168.1.21/aircon.json', function (data) {
+        // Create the chart
+        $('#container1').highcharts('StockChart', {
+            rangeSelector : {
+                selected : 1
+            },
+            title : {
+                text : 'Aircon'
+            },
+            series : [{
+                name : 'mwh/15min',
+                data : data,
+                tooltip: {
+                    valueDecimals: 2
+                }
+            }]
+        });
+    });
+});
+
+		</script>
+<form action="http://192.168.1.21/graph">
+    <input type="submit" value="Go to General Power usage graph" />
+</form>
+<form action="http://192.168.1.21/graph2">
+<input type="submit" value="Go to Aircon Total Cost" />
+</form>
+	</head>
+	<body>
+<script src="{{ url_for('static', filename='highstock.js') }}"></script>
+<script src="{{ url_for('static', filename='highcharts-more.js') }}"></script>
+<script src="{{ url_for('static', filename='exporting.js') }}"></script>
+<div id="container1" style="height:480px"></div> 
+
+	</head>
+	<body>
+   </body>
+</html>
