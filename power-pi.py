@@ -1,28 +1,37 @@
 from gpiozero import LightSensor, Buzzer
 from signal import pause
+import schedule
 import time
 import sys
 import Adafruit_DHT
-import schedule
 import argparse
 import sqlite3
 
-DATABASE = '/share/power-pi/database/power-sqlite.db'
+DATABASE = '/home/pi/power-sqlite.db'
 
-l_temp_sensor_type = Adafruit_DHT.DHT22
+l_temp_sensor_type = Adafruit_DHT.DHT11
 l_gpio_ldr_1 = 4
 l_gpio_ldr_2 = 23
-l_gpio_temp = 22
 l_cnt_1 = 0
 l_cnt_2 = 0
-l_out_file = "/share/power-pi/power-pi.txt"
+l_gpio_temp = 22
+l_cost_1_1 = 1000
+# change the below value to your relevant electricty price per KWH for the meter attached to sensor 1
+l_cost_1_2 = .23155
+l_cost_2_1 = 1000
+# change the below value to your relevant electricity price per KWH for the meter attached to sensor2
+l_cost_2_2 = .27828
+l_out_file = "/home/pi/power-pi.txt"
 l_poll_minutes = 15
 l_hr_rate_multiply = (60 / l_poll_minutes)
 l_verbosemode = False
 
+conn=sqlite3.connect(DATABASE)
+curs=conn.cursor()
+
 
 def insert_row(measurement):
-    sql = '''INSERT INTO measure_history (temperature, humidity, sensor_count_1, sensor_count_2, sensor_1_rate_mwh, sensor_2_rate_mwh) VALUES (?,?,?,?,?,?)'''
+    sql = '''INSERT INTO measure_history ( sensor_count_1, sensor_count_2, sensor_1_rate_mwh, sensor_2_rate_mwh, sensor_1_rate_cost, sensor_2_rate_cost, sensor_temp, sensor_hum, total_cost) VALUES (?,?,?,?,?,?,?,?,?)'''
     conn = sqlite3.connect(DATABASE)
     with conn:
         cur = conn.cursor()
@@ -38,6 +47,20 @@ def do_purge():
         cur.execute(sql)
     conn.close()
     exit(0)
+    
+def totalCost(totalCost):
+    sql = '''SELECT total_cost FROM measure_history ORDER BY total_cost DESC LIMIT 1'''
+    conn = sqlite3.connect(DATABASE)
+    with conn:
+        cur = conn.cursor()
+        cur.execute(sql)
+        totalCost = cur.fetchone()[0]
+    conn.close()
+    return totalCost
+    
+global total_cost_sum
+total_cost_sum = totalCost(totalCost)
+    
 
 def logmsg(msg):
     msg_text = "{} {}".format(time.strftime("%d/%m/%Y %H:%M:%S"), msg)
@@ -62,13 +85,23 @@ def light_pulse_seen_2():
 def handle_time_event():
     global l_cnt_1
     global l_cnt_2
-    l_humidity, l_temperature = Adafruit_DHT.read_retry(l_temp_sensor_type, l_gpio_temp)
-    logmsg("Pulses={},{} Temp={:0.1f}C  l_humidity={:0.1f}%".format(l_cnt_1, l_cnt_2, l_temperature, l_humidity))
-    measurement = (l_temperature, l_humidity, l_cnt_1, l_cnt_2, l_cnt_1*l_hr_rate_multiply , l_cnt_2*l_hr_rate_multiply )
+    l_humidity, l_temperature = Adafruit_DHT.read_retry(11, l_gpio_temp)
+    logmsg("Pulses={},{}".format(l_cnt_1, l_cnt_2))
+    measurement = (l_cnt_1, l_cnt_2, l_cnt_1*l_hr_rate_multiply , l_cnt_2*l_hr_rate_multiply, l_cnt_1/l_cost_1_1*l_cost_1_2, l_cnt_2/l_cost_2_1*l_cost_2_2, l_temperature, l_humidity, (l_cnt_1/l_cost_1_1*l_cost_1_2)+(l_cnt_2/l_cost_2_1*l_cost_2_2))
     insert_row(measurement)
     l_cnt_1 = 0
     l_cnt_2 = 0
-
+    
+def handle_time_event1():
+    for row in curs.execute("SELECT SUM(sensor_1_rate_cost), SUM(sensor_2_rate_cost), SUM(total_cost) FROM measure_history"):
+        sum_sensor_1_rate_cost = row[0]
+        sum_sensor_2_rate_cost = row[1]
+        sum_total_cost = row[2]
+        total = (sum_sensor_1_rate_cost, sum_sensor_2_rate_cost, sum_total_cost)
+        sql =  '''INSERT INTO totals (sensor_1_total_cost, sensor_2_total_cost, combined_total_cost) VALUES (?,?,?)'''
+    with conn:
+         curs.execute(sql, total)
+    
 def main():
     global l_verbosemode
     parser = argparse.ArgumentParser(description='Power and temp monitor.')
@@ -87,10 +120,11 @@ def main():
     ldr_2.when_light = light_pulse_seen_2
     handle_time_event()
     schedule.every(l_poll_minutes).minutes.do(handle_time_event)
+    schedule.every(l_poll_minutes).minutes.do(handle_time_event1)
 
     while True:
         schedule.run_pending()
         time.sleep(1)
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
