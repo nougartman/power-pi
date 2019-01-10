@@ -8,6 +8,7 @@ conn=sqlite3.connect('/home/pi/power-sqlite.db')
 curs=conn.cursor()
 app = Flask(__name__)
 
+
 # Retrieve LAST data from database
 def getLastData():
     for row in curs.execute("SELECT datetime(measure_time, '+10 hours') as measure_time, sensor_count_1, sensor_count_2, ROUND(sensor_1_rate_cost, 2), ROUND(sensor_2_rate_cost, 2), ROUND(total_cost, 2) FROM measure_history ORDER BY measure_time DESC LIMIT 1"):
@@ -35,7 +36,7 @@ def getHistData(numSamples):
             sensor_1_rate_cost.append(row[6])
             sensor_2_rate_cost.append(row[7])
         return measure_time, sensor_count_1, sensor_count_2, sensor_1_rate_cost, sensor_2_rate_cost
-    
+        
 def maxRowsTable():
     for row in curs.execute("select COUNT(sensor_count_1) from  measure_history"):
         maxNumberRows=row[0]
@@ -60,20 +61,14 @@ global numSamples
 numSamples = maxRowsTable()
 if (numSamples > 97):
     numSamples = 96
-    
-global costSamplesSensor1
-costSamplesSensor1 = costSamplesSensor11()
-
-global costSamplesSensor2
-costSamplesSensor2 = costSamplesSensor22()
-
-global costTotal
-costTotal = costTotal3()
  
 # main route
 @app.route("/")
 def index():
     measure_time, sensor_count_1, sensor_count_2, sensor_1_rate_cost, sensor_2_rate_cost, total_cost = getLastData()
+    costSamplesSensor1 = costSamplesSensor11()
+    costSamplesSensor2 = costSamplesSensor22()
+    costTotal = costTotal3()
     templateData = {
         'measure_time': measure_time,
         'sensor_count_1': sensor_count_1,
@@ -124,19 +119,6 @@ def airconCost():
 def graph2():
     return render_template('graph2.html')
 
-
-def schedule():
-    schedule.every(5).minutes.do(costSamplesSensor11)
-    schedule.every(5).minutes.do(costSamplesSensor22)
-    schedule.every(5).minutes.do(costTotal3)
-    schedule.every(5).minutes.do(getLastData)
-    schedule.every(5).minutes.do(getHistData)
-   
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
 if __name__ == "__main__":
-   app.run(host='0.0.0.0', port=80, debug=False)
-   
+    app.run(host='0.0.0.0', port=80, debug=False)
 
