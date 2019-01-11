@@ -3,15 +3,17 @@ import json
 from flask import Flask, render_template, send_file, make_response, request
 import sqlite3
 import schedule
-import time
+from datetime import date
+from datetime import time
 conn=sqlite3.connect('/home/pi/power-sqlite.db')
 curs=conn.cursor()
 app = Flask(__name__)
+#enter billing period dates below to return data for selected period
+dates = "2019-01-05 00:00:00", "2019-04-17 23:59:59"
 
-
-# Retrieve LAST data from database
 def getLastData():
-    for row in curs.execute("SELECT datetime(measure_time, '+10 hours') as measure_time, sensor_count_1, sensor_count_2, ROUND(sensor_1_rate_cost, 2), ROUND(sensor_2_rate_cost, 2), ROUND(total_cost, 2) FROM measure_history ORDER BY measure_time DESC LIMIT 1"):
+    sql = "SELECT datetime(measure_time, '+10 hours') as measure_time, sensor_count_1, sensor_count_2, ROUND(sensor_1_rate_cost, 2), ROUND(sensor_2_rate_cost, 2), ROUND(total_cost, 2) FROM measure_history ORDER BY measure_time DESC LIMIT 1"
+    for row in curs.execute(sql):
         measure_time = str(row[0])
         sensor_count_1 = row[1]
         sensor_count_2 = row[2]
@@ -43,17 +45,20 @@ def maxRowsTable():
     return maxNumberRows
     
 def costSamplesSensor11():
-    curs.execute("SELECT ROUND(sensor_1_total_cost, 2) FROM totals ORDER by measure_time1 DESC LIMIT 1")
+    sql = '''SELECT ROUND(SUM(sensor_1_rate_cost), 2) FROM measure_history WHERE datetime(measure_time, '+10 hours') BETWEEN ? AND ? ORDER by measure_time ASC LIMIT 1'''
+    curs.execute(sql, dates)
     costSamplesSensor1 = curs.fetchone()
     return costSamplesSensor1
 
 def costSamplesSensor22():
-    curs.execute("SELECT ROUND(sensor_2_total_cost, 2) FROM totals ORDER by measure_time1 DESC LIMIT 1")
+    sql = '''SELECT ROUND(SUM(sensor_2_rate_cost), 2) FROM measure_history WHERE datetime(measure_time, '+10 hours') BETWEEN ? AND ? ORDER by measure_time DESC LIMIT 1'''
+    curs.execute(sql, dates)
     costSamplesSensor2 = curs.fetchone()
     return costSamplesSensor2
     
 def costTotal3():
-    curs.execute("SELECT ROUND(combined_total_cost, 2) FROM totals ORDER by measure_time1 DESC LIMIT 1")
+    sql = '''SELECT ROUND(SUM(total_cost), 2) FROM measure_history WHERE datetime(measure_time, '+10 hours') BETWEEN ? AND ? ORDER by measure_time DESC LIMIT 1'''
+    curs.execute(sql, dates)
     costTotal3 = curs.fetchone()
     return costTotal3
 
@@ -86,7 +91,8 @@ def index():
 def aircon():
     connection = sqlite3.connect("/home/pi/power-sqlite.db")
     cursor = connection.cursor()
-    cursor.execute("SELECT (julianday(measure_time, '+10 hours')- 2440587.5)*86400000 AS measure_time, sensor_count_1 FROM measure_history")
+    sql = '''SELECT (julianday(measure_time, '+10 hours')- 2440587.5)*86400000 AS measure_time, sensor_count_1 FROM measure_history WHERE measure_time BETWEEN ? and ?'''
+    cursor.execute(sql, dates)
     results = cursor.fetchall()
     return json.dumps(results)
 
@@ -95,30 +101,20 @@ def graph1():
     return render_template('index.html')
 
     
-@app.route('/power.json')
+@app.route('/general power.json')
 def power():
     connection = sqlite3.connect("/home/pi/power-sqlite.db")
     cursor = connection.cursor()
-    cursor.execute("SELECT (julianday(measure_time, '+10 hours')- 2440587.5)*86400000 AS measure_time, sensor_count_2 FROM measure_history")
+    sql = '''SELECT (julianday(measure_time, '+10 hours')- 2440587.5)*86400000 AS measure_time, sensor_count_2 FROM measure_history WHERE measure_time BETWEEN ? AND ?'''
+    cursor.execute(sql, dates)
     results = cursor.fetchall()
     return json.dumps(results)
     
 @app.route("/graph")
 def graph():
-    return render_template('graph.html')
-    
-@app.route('/aircon-cost.json')
-def airconCost():
-    connection = sqlite3.connect("/home/pi/power-sqlite.db")
-    cursor = connection.cursor()
-    cursor.execute("SELECT (julianday(measure_time1, '+10hours')- 2440587.5)*86400000 AS measure_time1, sensor_1_total_cost FROM totals")
-    results = cursor.fetchall()
-    return json.dumps(results)
-    
-@app.route("/graph2")
-def graph2():
-    return render_template('graph2.html')
+    return render_template('index.html')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=80, debug=False)
+
 
